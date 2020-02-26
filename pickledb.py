@@ -76,11 +76,14 @@ class PickleDB(object):
             sys.exit(0)
         signal.signal(signal.SIGTERM, sigterm_handler)
 
-    def load(self, location, auto_dump):
+    def load(self, location, auto_dump, flags=os.O_RDWR|os.O_CREAT, mode=0o660):
         '''Loads, reloads or changes the path to the db file'''
         location = os.path.expanduser(location)
         self.loco = location
+        self.loco_fd = os.open(self.loco, flags=flags, mode=mode)
         self.auto_dump = auto_dump
+        self.flags = flags
+        self.mode = mode
         if os.path.exists(location):
             self._loaddb()
         else:
@@ -89,10 +92,10 @@ class PickleDB(object):
 
     def dump(self):
         '''Force dump memory db to file'''
-        json.dump(self.db, open(self.loco, 'wt'))
+        json.dump(self.db, os.fdopen(self.loco_fd, 'wt'))
         self.dthread = Thread(
             target=json.dump,
-            args=(self.db, open(self.loco, 'wt')))
+            args=(self.db, os.fdopen(self.loco_fd, 'wt')))
         self.dthread.start()
         self.dthread.join()
         return True
@@ -100,7 +103,7 @@ class PickleDB(object):
     def _loaddb(self):
         '''Load or reload the json info from the file'''
         try: 
-            self.db = json.load(open(self.loco, 'rt'))
+            self.db = json.load(os.fdopen(self.loco_fd, 'rt'))
         except ValueError:
             if os.stat(self.loco).st_size == 0:  # Error raised because file is empty
                 self.db = {}
